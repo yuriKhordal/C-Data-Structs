@@ -1,6 +1,10 @@
 #ifndef __LIST_H__
 #define __LIST_H__
 
+#include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+
 #define DEFAULT_SIZE 8
 
 #define STRUCT_LIST(type, List_name)																\
