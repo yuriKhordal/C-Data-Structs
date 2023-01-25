@@ -5,9 +5,11 @@
 #include <errno.h>
 #include "strbuild.h"
 
-void enlarge(StringBuilder* builder);
-void enlargeTo(StringBuilder* builder, size_t size);
+int enlarge(StringBuilder* builder);
+int enlargeTo(StringBuilder* builder, size_t size);
 char* resize(char* buff, size_t cap);
+
+
 
 StringBuilder* StringBuilder_new() {
   return StringBuilder_news(STRING_BUILDER_DEFAULT_SIZE);
@@ -15,41 +17,36 @@ StringBuilder* StringBuilder_new() {
 
 StringBuilder* StringBuilder_news(size_t size) {
   StringBuilder* builder = malloc(sizeof(StringBuilder));
-  if (!builder) {
-    fprintf(stderr, "Error at StringBuilder_news: Failed allocating a \
-StringBuilder pointer.\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    return NULL;
-  }
+  if (!builder) return NULL;
 
-  size_t temp = STRING_BUILDER_MINIMAL_SIZE;
-  while (temp < size) temp <<= 1;
-  size = temp;
-  builder->_buffer = calloc(size, sizeof(char));
-  if (!builder->_buffer) {
-    fprintf(stderr, "Error at StringBuilder_news: Failed allocating \
-StringBuilder's char buffer pointer.\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    return NULL;
-  }
-
-  builder->_size = 0;
-  builder->_capacity = size;
+  StringBuilder_init(builder, size);
+  return builder;
 }
 
 StringBuilder* StringBuilder_newa(const char* str, size_t n) {
-  if (!str) {
-    fprintf(stderr, "Error at StringBuilder_newa: argument 'str' is \
-NULL.\n");
-    return NULL;
-  }
+  if (!str) return NULL;
   
   StringBuilder* builder = StringBuilder_news(n + 1);
-  if (!builder) return NULL; //StringBuilder_news already prints the error
+  if (!builder) return NULL;
 
   memcpy(builder->_buffer, str, n);
   builder->_buffer[n] = '\0';
   builder->_size = n;
+  return builder;
+}
+
+void StringBuilder_init(StringBuilder* builder, size_t size) {
+  if (!builder) return;
+
+  size_t temp = STRING_BUILDER_MINIMAL_SIZE;
+  // Find the closest power of 2 bigger then size.
+  while (temp < size) temp <<= 1;
+  size = temp;
+  builder->_buffer = calloc(size, sizeof(char));
+  if (!builder->_buffer) return NULL;
+
+  builder->_size = 0;
+  builder->_capacity = size;
 }
 
 
@@ -75,95 +72,122 @@ void StringBuilder_set(StringBuilder* builder, char c, size_t index) {
 }
 
 
-void StringBuilder_append(StringBuilder* builder, const char* str, size_t n) {
-  if (!str) {
-    fprintf(stderr, "Error at StringBuilder_append: 'str' argument is null\n");
-    return;
-  }
+
+DS_codes_t StringBuilder_append(StringBuilder* builder, const char* str) {
+  return StringBuilder_nappend(builder, str, strlen(str));
+}
+
+DS_codes_t StringBuilder_nappend(StringBuilder* builder,
+const char* str, size_t n) {
+  if (!str) return ERR_NULL;
+  if (n == 0) return DS_SUCCESS;
 
   // +1 for null terminator.
-  if (builder->_size + n + 1 >= builder->_capacity)
-    enlargeTo(builder, builder->_size + n + 1);
+  if (builder->_size + n + 1 >= builder->_capacity) {
+    int res = enlargeTo(builder, builder->_size + n + 1);
+    if (res != DS_SUCCESS) return res;
+  }
 
-  /*for (size_t i = 0; i < n; i++)
-    builder->_buffer[builder->_size++] = str[i];*/
   memcpy(builder->_buffer + builder->_size, str, sizeof(char) * n);
 
   builder->_size += n;
+  return DS_SUCCESS;
 }
 
-void StringBuilder_appendMultiple(StringBuilder* builder, const char* str,
-    size_t n, size_t times) {
-  if (!str) {
-    fprintf(stderr, "Error at StringBuilder_appendMultiple: 'str' argument \
-is null\n");
-    return;
+DS_codes_t StringBuilder_appendMultiple(StringBuilder* builder,
+const char* str, size_t times) {
+  return StringBuilder_nappendMultiple(builder, str, strlen(str), times);
+}
+
+DS_codes_t StringBuilder_nappendMultiple(StringBuilder* builder,
+const char* str, size_t n, size_t times) {
+  if (!str) return ERR_NULL;
+  if (times == 0 || n == 0) return DS_SUCCESS;
+
+  if (builder->_size + n * times + 1 >= builder->_capacity) {
+    int res = enlargeTo(builder, builder->_size + n * times + 1);
+    if (res != DS_SUCCESS) return res;
   }
-
-  if (builder->_size + n * times + 1 >= builder->_capacity)
-    enlargeTo(builder, builder->_size + n * times + 1);
-
-  /*while (times--) for (size_t i = 0; i < n; i++)
-    builder->_buffer[builder->_size++] = str[i];*/
+  
   for (size_t i = 0; i < times; i++)
     memcpy(builder->_buffer + builder->_size + (i * n), str, sizeof(char) * n);
     
   builder->_size += n * times;
+  return DS_SUCCESS;
 }
 
-void StringBuilder_appendChar(StringBuilder* builder, char c) {
+DS_codes_t StringBuilder_appendChar(StringBuilder* builder, char c) {
   builder->_buffer[builder->_size++] = c;
-  if (builder->_size == builder->_capacity) enlarge(builder);
-}
-
-void StringBuilder_appendChars(StringBuilder* builder, char c, size_t times) {
-  // +1 for null terminator.
-  if (builder->_size + times + 1 >= builder->_capacity)
-    enlargeTo(builder, builder->_size + times + 1);
-  while (times--) builder->_buffer[builder->_size++] = c;
-}
-
-
-void StringBuilder_insert(StringBuilder* builder, size_t index, const char* str,
-    size_t n) {
-  if (!str) {
-    fprintf(stderr, "Error at StringBuilder_insert: 'str' argument is null\n");
-    return;
+  if (builder->_size == builder->_capacity) {
+    int res = enlarge(builder);
+    if (res != DS_SUCCESS) return res;
   }
-  if (index > builder->_size) return;
+  return DS_SUCCESS;
+}
+
+DS_codes_t StringBuilder_appendChars(StringBuilder* builder,
+char c, size_t times) {
+  if (times == 0) return DS_SUCCESS;
+
+  // +1 for null terminator.
+  if (builder->_size + times + 1 >= builder->_capacity) {
+    int res = enlargeTo(builder, builder->_size + times + 1);
+    if (res != DS_SUCCESS) return res;
+  }
+  while (times--) builder->_buffer[builder->_size++] = c;
+  return DS_SUCCESS;
+}
+
+
+
+DS_codes_t StringBuilder_insert(StringBuilder* builder,
+size_t index, const char* str) {
+  return StringBuilder_ninsert(builder, index, str, strlen(str));
+}
+
+DS_codes_t StringBuilder_ninsert(StringBuilder* builder,
+size_t index, const char* str, size_t n) {
+  if (!str) return ERR_NULL;
+  if (index > builder->_size) return ERR_OUTOFRANGE;
+  if (n == 0) return DS_SUCCESS;
 
   char* src = builder->_buffer;
   char* dest = src;
   size_t cap = builder->_capacity;
   size_t size = builder->_size + 1 + n;
   while (cap < size) cap <<= 1;
-  if (cap != builder->_capacity) {
+  if (cap > builder->_capacity) {
     dest = calloc(cap, sizeof(char));
-    //technically index-1 but it's being overwritten anyways
+    if (!dest) return ERR_MEM;
+    // Technically index-1 but it's being overwritten anyways
     memcpy(dest, src, sizeof(char) * index);
   }
 
-  //make space for the string, and then copy it to that space
+  // Make space for the string, and then copy it to that space
   memmove(dest + index + n, src + index,
     sizeof(char) * (builder->_size - index));
   memcpy(dest + index, str, sizeof(char) * n);
 
-  //free if 'dest' is a new memory block
+  // Free if 'dest' is a new memory block
   if (dest != src){
     free(builder->_buffer);
     builder->_buffer = dest;
     builder->_capacity = cap;
   }
   builder->_size += n;
+  return DS_SUCCESS;
 }
 
-void StringBuilder_insertMultiple(StringBuilder* builder, size_t index,
-    const char* str, size_t n, size_t times){
-  if (!str) {
-    fprintf(stderr, "Error at StringBuilder_insert: 'str' argument is null\n");
-    return;
-  }
-  if (index > builder->_size) return;
+DS_codes_t StringBuilder_insertMultiple(StringBuilder* builder,
+size_t index, const char* str, size_t times) {
+  return StringBuilder_ninsertMultiple(builder, index, str, strlen(str), times);
+}
+
+DS_codes_t StringBuilder_ninsertMultiple(StringBuilder* builder,
+size_t index, const char* str, size_t n, size_t times) {
+  if (!str) return ERR_NULL;
+  if (index > builder->_size) return ERR_OUTOFRANGE;
+  if (times == 0 || n == 0) return DS_SUCCESS;
 
   char* src = builder->_buffer;
   char* dest = src;
@@ -172,27 +196,31 @@ void StringBuilder_insertMultiple(StringBuilder* builder, size_t index,
   while (cap < size) cap <<= 1;
   if (cap != builder->_capacity) {
     dest = calloc(cap, sizeof(char));
-    //technically index-1 but it's being overwritten anyways
+    if (!dest) return ERR_MEM;
+    // Technically index-1 but it's being overwritten anyways
     memcpy(dest, src, sizeof(char) * index);
   }
 
-  //make space for the string and copy it 'times' times to the space
+  // Make space for the string and copy it 'times' times to the space
   memmove(dest + index + (n * times), src + index,
     sizeof(char) * (builder->_size - index));
   for (int i = 0; i < times; i++)
     memcpy(dest + index + (i * n), str, sizeof(char) * n);
 
-  //free if 'dest' is a new memory block
+  // Free if 'dest' is a new memory block
   if (dest != src){
     free(builder->_buffer);
     builder->_buffer = dest;
     builder->_capacity = cap;
   }
   builder->_size += n * times;
+  return DS_SUCCESS;
 }
 
-void StringBuilder_insertChar(StringBuilder* builder, size_t index, char c){
-  if (index > builder->_size) return;
+// TODO: Change to memmove
+DS_codes_t StringBuilder_insertChar(StringBuilder* builder,
+size_t index, char c){
+  if (index > builder->_size) return ERR_OUTOFRANGE;
   
   char prev = c;
   for (;index <= builder->_size; index++){
@@ -201,15 +229,23 @@ void StringBuilder_insertChar(StringBuilder* builder, size_t index, char c){
     builder->_buffer[index] = temp;
   }
   
-  if (++builder->_size == builder->_capacity) enlarge(builder);
+  if (++builder->_size == builder->_capacity) {
+    int res = enlarge(builder);
+    if (res != DS_SUCCESS) return res;
+  }
+  return DS_SUCCESS;
 }
 
-void StringBuilder_insertChars(StringBuilder* builder, size_t index, char c,
-    size_t times){
-  if (!times) return;
-  if (index > builder->_size) return;
-  if (builder->_size + times >= builder->_capacity)
-    enlargeTo(builder, builder->_size + 1 + times);
+// TODO: Change to memmove
+DS_codes_t StringBuilder_insertChars(StringBuilder* builder,
+size_t index, char c, size_t times){
+  if (index > builder->_size) return ERR_OUTOFRANGE;
+  if (times == 0) return DS_SUCCESS;
+
+  if (builder->_size + times >= builder->_capacity) {
+    int res = enlargeTo(builder, builder->_size + 1 + times);
+    if (res != DS_SUCCESS) return res;
+  }
 
   //move the buffer 'times' times to the right
   for (size_t i = builder->_size + times - 1; i >= index + times; i--){
@@ -220,17 +256,33 @@ void StringBuilder_insertChars(StringBuilder* builder, size_t index, char c,
   for (size_t i = 0; i < times; i++) builder->_buffer[index + i] = c;
 
   builder->_size += times;
+  return DS_SUCCESS;
 }
 
 
 
-size_t StringBuilder_indexOf(const StringBuilder* builder, char* str, size_t n) {
-  if (!str) {
-    fprintf(stderr, "Error at StringBuilder_append: 'str' argument is null\n");
-    return builder->_size;
-  }
+// TODO: see inside.
+size_t StringBuilder_indexOf(const StringBuilder* builder, char* str) {
+  return StringBuilder_nindexOfFrom(builder, str, strlen(str), 0);
+}
 
-  for (size_t i = 0, stri = 0; i < builder->_size; i++, stri++) {
+size_t StringBuilder_indexOfFrom(const StringBuilder* builder,
+char* str, size_t fromIndex) {
+  return StringBuilder_nindexOfFrom(builder, str, strlen(str), fromIndex);
+}
+
+size_t StringBuilder_nindexOf(const StringBuilder* builder,
+char* str, size_t n) {
+  return StringBuilder_nindexOfFrom(builder, str, n, 0);
+}
+
+size_t StringBuilder_nindexOfFrom(const StringBuilder* builder,
+char* str, size_t n, size_t fromIndex) {
+  if (!str) return builder->_size;
+
+  // TODO: Potentially skips on strings with duplicates?
+  // What happens when searching for "oneonetwo" in "123oneoneonetwothree"?
+  for (size_t i = fromIndex, stri = 0; i < builder->_size; i++, stri++) {
     if (builder->_buffer[i] != str[stri]) stri = 0;
     if (stri >= n - 1) return i - stri;
   }
@@ -238,19 +290,36 @@ size_t StringBuilder_indexOf(const StringBuilder* builder, char* str, size_t n) 
 }
 
 size_t StringBuilder_indexOfChar(const StringBuilder* builder, char c) {
-  for (size_t i = 0; i < builder->_size; i++)
+  return StringBuilder_indexOfCharFrom(builder, c, 0);
+}
+
+size_t StringBuilder_indexOfCharFrom(const StringBuilder* builder,
+char c, size_t fromIndex) {
+  for (size_t i = fromIndex; i < builder->_size; i++)
     if (builder->_buffer[i] == c) return i;
   return builder->_size;
 }
 
-size_t StringBuilder_lastIndexOf(const StringBuilder* builder, char* str,
-    size_t n) {
-  if (!str) {
-    fprintf(stderr, "Error at StringBuilder_append: 'str' argument is null\n");
-    return builder->_size;
-  }
+size_t StringBuilder_lastIndexOf(const StringBuilder* builder,
+char* str) {
+  return StringBuilder_nlastIndexOfFrom(builder, str, strlen(str), builder->_size - 1);
+}
 
-  for (size_t i = builder->_size - 1, stri = n - 1;; i--, stri--) {
+size_t StringBuilder_lastIndexOfFrom(const StringBuilder* builder,
+char* str, size_t fromIndex) {
+  return StringBuilder_nlastIndexOfFrom(builder, str, strlen(str), fromIndex);
+}
+
+size_t StringBuilder_nlastIndexOf(const StringBuilder* builder,
+char* str, size_t n) {
+  return StringBuilder_nlastIndexOfFrom(builder, str, n, builder->_size - 1);
+}
+
+size_t StringBuilder_nlastIndexOfFrom(const StringBuilder* builder,
+char* str, size_t n, size_t fromIndex) {
+  if (!str) return builder->_size;
+
+  for (size_t i = fromIndex, stri = n - 1;; i--, stri--) {
     if (builder->_buffer[i] != str[stri]) stri = n - 1;
     if (stri == 0) return i;
     if (i == 0) break;
@@ -259,7 +328,12 @@ size_t StringBuilder_lastIndexOf(const StringBuilder* builder, char* str,
 }
 
 size_t StringBuilder_lastIndexOfChar(const StringBuilder* builder, char c) {
-  for (int i = builder->_size - 1;; i--) {
+  return StringBuilder_lastIndexOfCharFrom(builder, c, builder->_size - 1);
+}
+
+size_t StringBuilder_lastIndexOfCharFrom(const StringBuilder* builder,
+char c, size_t fromIndex) {
+  for (int i = fromIndex;; i--) {
     if (builder->_buffer[i] == c) return i;
     if (i == 0) break;
   }
@@ -267,26 +341,28 @@ size_t StringBuilder_lastIndexOfChar(const StringBuilder* builder, char c) {
 }
 
 
-void StringBuilder_replace(StringBuilder* builder, const char* str, size_t nstr,
-    const char* newStr, size_t nnewStr) {
-  if (!str || !newStr) {
-    fprintf(stderr, "Error at StringBuilder_replace: 'str' or 'newStr' \
-argument is null\n");
-    return;
-  }
 
-  //divide into oldbuff - the original, and buff - a new buffer to copy to
+DS_codes_t StringBuilder_replace(StringBuilder* builder,
+const char* str, const char* newStr) {
+  return StringBuilder_nreplace(builder, str, strlen(str), newStr, strlen(newStr));
+}
+
+DS_codes_t StringBuilder_nreplace(StringBuilder* builder,
+const char* str, size_t nstr, const char* newStr, size_t nnewStr) {
+  if (!str || !newStr) return ERR_NULL;
+  if (nstr == 0 && nnewStr == 0) return DS_SUCCESS;
+
+  // Divide into oldbuff - the original, and buff - a new buffer to copy to
   char* oldbuff = builder->_buffer;
   size_t cap = builder->_capacity, size = builder->_size - nstr + nnewStr;
   while (cap <= size) cap <<= 1;
   char* buff = calloc(cap, sizeof(char));
   if (!buff) {
-    fprintf(stderr, "Error at StringBuilder_replace: Failed allocating \
-memory\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    return;
+    free(buff);
+    return ERR_MEM;
   }
 
+  // TODO: Same possible problem as with indexOf.
   size_t i = builder->_size;
   for (size_t oldi = 0, stri = 0; oldi < builder->_size; oldi++, stri++) {
     if (oldbuff[oldi] != str[stri]) stri = 0;
@@ -299,13 +375,9 @@ memory\n");
 
   if (i == builder->_size) {
     free(buff);
-    return;
+    return DS_SUCCESS;
   }
 
-  /*for (size_t stri = 0; stri < nnewStr; stri++, i++)
-    buff[i] = newStr[stri];
-  for (size_t oldi = i - nnewStr + nstr; oldi < builder->_size; oldi++, i++)
-    buff[i] = oldbuff[i];*/
   memmove(buff + i + nnewStr, oldbuff + i + nstr,
     sizeof(char) * (builder->_size - i - nstr));
   memmove(buff + i, newStr, sizeof(char) * nnewStr);
@@ -315,24 +387,25 @@ memory\n");
   builder->_buffer = buff;
   builder->_size = size;
   builder->_capacity = cap;
+  return DS_SUCCESS;
 }
 
-void StringBuilder_replaceAll(StringBuilder* builder, const char* str,
-    size_t nstr, const char* newStr, size_t nnewStr) {
-  if (!str || !newStr) {
-    fprintf(stderr, "Error at StringBuilder_replace: 'str' or 'newStr' \
-argument is null\n");
-    return;
-  }
+DS_codes_t StringBuilder_replaceAll(StringBuilder* builder,
+const char* str, const char* newStr) {
+  return StringBuilder_nreplaceAll(builder, str, strlen(str), newStr, strlen(newStr));
+}
+
+DS_codes_t StringBuilder_nreplaceAll(StringBuilder* builder,
+const char* str, size_t nstr, const char* newStr, size_t nnewStr) {
+  if (!str || !newStr) return ERR_NULL;
+  if (nstr == 0 && nnewStr == 0) return DS_SUCCESS;
 
   char* oldbuff = builder->_buffer;
   size_t cap = builder->_capacity;
   char* buff = calloc(cap, sizeof(char));
   if (!buff) {
-    fprintf(stderr, "Error at StringBuilder_replace: Failed allocating \
-memory\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    return;
+    free(buff);
+    return ERR_MEM;
   }
 
   size_t i = 0;
@@ -341,7 +414,12 @@ memory\n");
     if (stri == nstr) {
       i -= stri;
       if (i + nnewStr + (builder->_size - oldi) >= cap - 1) {
-        buff = resize(buff, cap);
+        char* temp = resize(buff, cap);
+        if (!temp) {
+          free(buff);
+          return ERR_MEM;
+        }
+        buff = temp;
         cap <<= 1;
       }
       /*for (stri = 0; stri < nnewStr; stri++, i++)
@@ -360,24 +438,31 @@ memory\n");
   builder->_buffer = buff;
   builder->_size = i;
   builder->_capacity = cap;
+  return DS_SUCCESS;
 }
 
 void StringBuilder_replaceChar(StringBuilder* builder, char c, char newc) {
-  for (size_t i = 0; i < builder->_size; i++)
+  for (size_t i = 0; i < builder->_size; i++) {
     if (builder->_buffer[i] == c) {
       builder->_buffer[i] = newc;
       return;
     }
+  }
 }
 
 void StringBuilder_replaceAllChar(StringBuilder* builder, char c, char newc) {
-  for (size_t i = 0; i < builder->_size; i++)
-    if (builder->_buffer[i] == c)
-      builder->_buffer[i] = newc;
+  for (size_t i = 0; i < builder->_size; i++) {
+    if (builder->_buffer[i] == c) builder->_buffer[i] = newc;
+  }
 }
 
 
-void StringBuilder_remove(StringBuilder* builder, const char* str, size_t n) {
+
+void StringBuilder_remove(StringBuilder* builder, const char* str) {
+  StringBuilder_nremove(builder, str, strlen(str));
+}
+
+void StringBuilder_nremove(StringBuilder* builder, const char* str, size_t n) {
   char* buff = builder->_buffer;
   size_t size = builder->_size;
 
@@ -411,12 +496,16 @@ void StringBuilder_removeChar(StringBuilder* builder, char chr) {
   }
 }
 
-void StringBuilder_removeAll(StringBuilder* builder, const char* str, size_t n) {
+void StringBuilder_removeAll(StringBuilder* builder, const char* str) {
+  StringBuilder_nremoveAll(builder, str, strlen(str));
+}
+
+void StringBuilder_nremoveAll(StringBuilder* builder, const char* str, size_t n) {
   char* buff = builder->_buffer;
   size_t size = builder->_size;
-  size_t d = 0; //delta, difference, distance, whatever
+  size_t d = 0; // delta, difference, distance, whatever
 
-  //search for the string in the buffer
+  // Search for the string in the buffer
   for (size_t buffi = 0, stri = 0; buffi < size - d; buffi++) {
     if (stri == n){
       buffi -= n;
@@ -430,7 +519,7 @@ void StringBuilder_removeAll(StringBuilder* builder, const char* str, size_t n) 
     else stri = 0;
   }
 
-  //update the size and set null terminator
+  // Update the size and set null terminator
   if (d){
     builder->_size -= d;
     buff[builder->_size] = '\0';
@@ -440,15 +529,15 @@ void StringBuilder_removeAll(StringBuilder* builder, const char* str, size_t n) 
 void StringBuilder_removeAllChar(StringBuilder* builder, char chr) {
   char* buff = builder->_buffer;
   size_t size = builder->_size;
-  size_t d = 0; //delta, difference, distance, whatever
+  size_t d = 0; // delta, difference, distance, whatever
   
-  //search for the character
+  // Search for the character
   for (size_t i = 0; i < size - d; i++){
     if (buff[i + d] == chr) d++;
     if (d) buff[i] = buff[i + d];
   }
 
-  //update the size and set null terminator
+  // Update the size and set null terminator
   if (d){
     builder->_size -= d;
     buff[builder->_size] = '\0';
@@ -460,7 +549,8 @@ void StringBuilder_removeAt(StringBuilder* builder, size_t index) {
 }
 
 void StringBuilder_removeRange(StringBuilder* builder, size_t index, size_t n) {
-  if (index >= builder->_size || !n) return;
+  if (index >= builder->_size || n == 0) return;
+
   if (n > builder->_size - index) n = builder->_size - index;
   char* buff = builder->_buffer;
   size_t size = builder->_size - index - n;
@@ -472,31 +562,23 @@ void StringBuilder_removeRange(StringBuilder* builder, size_t index, size_t n) {
 }
 
 
+
 char* StringBuilder_buildString(const StringBuilder* builder) {
   char* string = malloc(sizeof(char) * (builder->_size + 1));
-  if (!string) {
-    fprintf(stderr, "Error at StringBuilder_buildString: Failed allocating \
-a string pointer.\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    return NULL;
-  }
+  if (!string) return NULL;
 
   memcpy(string, builder->_buffer, builder->_size);
   string[builder->_size] = '\0';
   return string;
 }
 
-char* StringBuilder_buildSubString(const StringBuilder* builder, size_t index,
-    size_t n) {
-  if (index >= builder->_size || !n) return NULL;
+char* StringBuilder_buildSubString(const StringBuilder* builder,
+size_t index, size_t n) {
+  if (index >= builder->_size || n == 0) return NULL;
+
   char* string = calloc(n + 1, sizeof(char));
+  if (!string) return NULL;
   if (n > builder->_size - index) n = builder->_size - index;
-  if (!string) {
-    fprintf(stderr, "Error at StringBuilder_buildString: Failed allocating \
-a string pointer.\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    return NULL;
-  }
   
   memcpy(string, builder->_buffer + index, n * sizeof(char));
   string[n] = '\0';
@@ -504,14 +586,19 @@ a string pointer.\n");
 }
 
 
+
 void StringBuilder_clear(StringBuilder* builder) {
   builder->_buffer[0] = '\0';
   builder->_size = 0;
 }
 
+void StringBuilder_destroy(StringBuilder* ptr) {
+  if (ptr && ptr->_buffer) free(ptr->_buffer);
+}
+
 StringBuilder* StringBuilder_free(StringBuilder* ptr) {
   if (!ptr) return NULL;
-  if (ptr->_buffer) free(ptr->_buffer);
+  StringBuilder_destroy(ptr);
   free(ptr);
   return NULL;
 }
@@ -548,53 +635,43 @@ void debugPrint(const StringBuilder* builder){
 }
 
 //Increase the StringBuilder's capacity x2.
-void enlarge(StringBuilder* builder) {
+int enlarge(StringBuilder* builder) {
   size_t cap = builder->_capacity << 1;
   char* buff = realloc(builder->_buffer, (sizeof(char) * cap));
-  if (!buff) {
-    fprintf(stderr, "Error at enlarge: Failed allocating new buffer.\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    free(builder->_buffer);
-    return;
-  }
+  if (!buff) return ERR_MEM;
 
-  //for (size_t i = builder->_capacity; i < cap; i++) buff[i] = '\0';
+  // Fill the new memory with zeors.
   memset(buff + builder->_capacity, '\0', sizeof(char) * builder->_capacity);
   builder->_buffer = buff;
   builder->_capacity = cap;
+  
+  return DS_SUCCESS;
 }
 
 /*Increase the StringBuilder's capacity to the closest(rounding up) power of 2
  * of the specified size(Does *not* shrink). */
-void enlargeTo(StringBuilder* builder, size_t size) {
+int enlargeTo(StringBuilder* builder, size_t size) {
   size_t cap = builder->_capacity;
   while (cap < size) cap <<= 1;
   char* buff = realloc(builder->_buffer, (sizeof(char) * cap));
-  if (!buff) {
-    fprintf(stderr, "Error at enlarge: Failed allocating new buffer.\n");
-    fprintf(stderr, "%s\n", strerror(errno));
-    free(builder->_buffer);
-    builder->_buffer = NULL;
-    return;
-  }
+  if (!buff) return ERR_MEM;
 
-  //for (size_t i = builder->_capacity; i < cap; i++) buff[i] = '\0';
+  // Fill the new memory with zeros.
   memset(buff + builder->_capacity, '\0',
     sizeof(char) * (cap - builder->_capacity));
   builder->_buffer = buff;
   builder->_capacity = cap;
+
+  return DS_SUCCESS;
 }
 
-//Return a bigger copy of an array, and free the original.
+// Return a bigger copy of an array, and free the original.
 char* resize(char* buff, size_t cap) {
   char* newBuff = realloc(buff, cap << 1);
-  if (!newBuff){
-    fprintf(stderr, "Error at StringBuilder_replaceAll: Failed to allocate \
-memory.\n");
-    fprintf(stderr, "%s\n", strerror(errno));
+  if (!newBuff) {
     return NULL;
   }
-  //for (size_t i = cap; i < cap << 1; i++) buff[i] = '\0';
+  // Fill the new memory with zeros.
   memset(newBuff + cap, '\0', sizeof(char)*cap);
   return newBuff;
 }
