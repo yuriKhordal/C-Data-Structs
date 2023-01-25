@@ -42,7 +42,7 @@ void primes_test() {
 
 void hashmap_test() {
   HashMap_name map;
-  HashMap_codes_t code;
+  DS_codes_t code;
   HashMap_name_init(&map, 0);
   printf("Start: "); hashmap_print(&map);
 

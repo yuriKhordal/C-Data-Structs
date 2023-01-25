@@ -6,6 +6,7 @@
 #include<string.h>
 #include<stdbool.h>
 #include "primes.h"
+#include "errors.h"
 
 /**
  * Get the first entry in a bucket or NULL if the bucket is empty.
@@ -44,14 +45,6 @@ typedef SSIZE_T ssize_t;
 #include <unistd.h>
 #endif
 
-/**Represents function return codes.*/
-typedef enum {
-  HMP_SET = 2, HMP_ADD = 1,
-  HM_SUCCESS = 0,
-  HMERR_TOOSMALL= -1, HMERR_TOOBIG = -3, HMERR_MEM = -3,
-  HMERR_KEYNOTFOUND = -4
-} HashMap_codes_t;
-
 /* ========================= DECLARATIONS ========================= */
 
 #define HashMap_entry_declare(hm_name) typedef struct hm_name##_entry_t hm_name##_entry_t;
@@ -85,11 +78,11 @@ hm_name * hm_name##_snew(size_t size);
  * this function will initialize it fully. \
  * @param map The map to initialize. \
  * @param size The initial size of the map. 0 for default size. \
- * @return HM_SUCCESS on successfull initialization, an error code on failure. \
+ * @return DS_SUCCESS on successfull initialization, an error code on failure. \
  * @note Error codes: \
- * HMERR_MEM - Memory allocation error. \
+ * ERR_MEM - Memory allocation error. \
 */ \
-HashMap_codes_t hm_name##_init(hm_name *map, size_t size);
+DS_codes_t hm_name##_init(hm_name *map, size_t size);
 
 #define HashMap_put_declare(hm_name, key_t, val_t) \
 /** \
@@ -101,9 +94,9 @@ HashMap_codes_t hm_name##_init(hm_name *map, size_t size);
  * and it's paired value was overwritten. An error code on failure. Can only \
  * while adding a new pair, not when setting. \
  * @note Errors:  \
- * HMERR_MEM - Memory allocation error. \
+ * ERR_MEM - Memory allocation error. \
 */ \
-HashMap_codes_t hm_name##_put(hm_name *map, const key_t *key, const val_t *value);
+DS_codes_t hm_name##_put(hm_name *map, const key_t *key, const val_t *value);
 
 #define HashMap_has_declare(hm_name, key_t) \
 /** \
@@ -128,11 +121,11 @@ val_t * hm_name##_get(const hm_name *map, const key_t *key);
  * Remove the value mapped to a specified key. \
  * @param map The hash map. \
  * @param key The key that the value was mapped to. \
- * @return HM_SUCCESS on successfull removal, an error code otherwise. \
+ * @return DS_SUCCESS on successfull removal, an error code otherwise. \
  * @note Errors:  \
- * HMERR_KEYNOTFOUND - If the key was not found in the map. \
+ * ERR_KEYNOTFOUND - If the key was not found in the map. \
 */ \
-HashMap_codes_t hm_name##_remove(hm_name *map, const key_t *key);
+DS_codes_t hm_name##_remove(hm_name *map, const key_t *key);
 
 #define HashMap_clear_declare(hm_name) \
 /** \
@@ -146,14 +139,14 @@ void hm_name##_clear(hm_name *map);
  * Attempts to resize the map to different size. \
  * @param map The hash map. \
  * @param new_size The new size for the map. \
- * @return HM_SUCCESS on successful resizing, an error code on failure. \
+ * @return DS_SUCCESS on successful resizing, an error code on failure. \
  * @note Errors: \
- * HMERR_TOOSMALL - The new size is too small to fit in all elements already \
+ * ERR_TOOSMALL - The new size is too small to fit in all elements already \
  * present in the map. \
- * HMERR_TOOBIG - The new size is too big for the hash map to resize. \
- * HMERR_MEM - Memory allocation error. \
+ * ERR_TOOBIG - The new size is too big for the hash map to resize. \
+ * ERR_MEM - Memory allocation error. \
 */ \
-HashMap_codes_t hm_name##_resize(hm_name *map, size_t new_size);
+DS_codes_t hm_name##_resize(hm_name *map, size_t new_size);
 
 #define HashMap_destroy_declare(hm_name) \
 /** \
@@ -219,22 +212,22 @@ hm_name * hm_name##_new() { \
 hm_name * hm_name##_snew(size_t size) { \
   hm_name *map = malloc(sizeof(hm_name)); \
   if (map == NULL) return NULL; \
-  if (hm_name##_init(map, size) != HM_SUCCESS) return NULL; \
+  if (hm_name##_init(map, size) != DS_SUCCESS) return NULL; \
   return map; \
 }
 
 #define HashMap_init_define(hm_name) \
-HashMap_codes_t hm_name##_init(hm_name *map, size_t size) { \
+DS_codes_t hm_name##_init(hm_name *map, size_t size) { \
   size_t initial = nearest_prime(size); \
  \
   map->buckets = malloc(initial*sizeof(size_t)); \
-  if (map->buckets == NULL) return HMERR_MEM; \
+  if (map->buckets == NULL) return ERR_MEM; \
   for(size_t i = 0; i < initial; i++) map->buckets[i] = -1; \
  \
   map->entries = malloc(initial*sizeof(hm_name##_entry_t)); \
   if (map->entries == NULL) { \
     free(map->buckets); \
-    return HMERR_MEM; \
+    return ERR_MEM; \
   } \
   for(size_t i = 0; i < initial; i++) { \
     map->entries[i].next = i+1; \
@@ -244,11 +237,11 @@ HashMap_codes_t hm_name##_init(hm_name *map, size_t size) { \
   map->size = 0; \
   map->next_empty = 0; \
  \
-  return HM_SUCCESS; \
+  return DS_SUCCESS; \
 }
 
 #define HashMap_put_define(hm_name, key_t, val_t, hash_t) \
-HashMap_codes_t hm_name##_put(hm_name *map, const key_t *key, const val_t *value) { \
+DS_codes_t hm_name##_put(hm_name *map, const key_t *key, const val_t *value) { \
   hash_t hash = hm_name##_hash(key); \
   size_t bucket = hash % map->cap; \
   ssize_t index = map->buckets[bucket]; \
@@ -280,8 +273,8 @@ HashMap_codes_t hm_name##_put(hm_name *map, const key_t *key, const val_t *value
   /* Check if resize needed. */ \
   map->size++; \
   if (map->size == map->cap) { \
-    HashMap_codes_t res = hm_name##_resize(map, map->cap + 1); \
-    if (res != HM_SUCCESS) return res; \
+    DS_codes_t res = hm_name##_resize(map, map->cap + 1); \
+    if (res != DS_SUCCESS) return res; \
   } \
  \
   return HMP_ADD; \
@@ -320,7 +313,7 @@ val_t * hm_name##_get(const hm_name *map, const key_t *key) { \
 }
 
 #define HashMap_remove_define(hm_name, key_t, hash_t) \
-HashMap_codes_t hm_name##_remove(hm_name *map, const key_t *key) { \
+DS_codes_t hm_name##_remove(hm_name *map, const key_t *key) { \
   hash_t hash = hm_name##_hash(key); \
   size_t bucket = hash % map->cap; \
   ssize_t prev = -1; \
@@ -336,12 +329,12 @@ HashMap_codes_t hm_name##_remove(hm_name *map, const key_t *key) { \
       entry->next = map->next_empty; \
       map->next_empty = i; \
       map->size--; \
-      return HM_SUCCESS; \
+      return DS_SUCCESS; \
     } \
     prev = i; \
   } \
  \
-  return HMERR_KEYNOTFOUND; \
+  return ERR_KEYNOTFOUND; \
 }
 
 #define HashMap_clear_define(hm_name) \
@@ -355,15 +348,15 @@ void hm_name##_clear(hm_name *map) { \
 }
 
 #define HashMap_resize_define(hm_name) \
-HashMap_codes_t hm_name##_resize(hm_name *map, size_t new_size) { \
-  if (new_size < map->size) return HMERR_TOOSMALL; \
+DS_codes_t hm_name##_resize(hm_name *map, size_t new_size) { \
+  if (new_size < map->size) return ERR_TOOSMALL; \
  \
   /* Find the next prime size. */ \
   new_size = nearest_prime(new_size); \
-  if (new_size == PRIME_TOOBIG) return HMERR_TOOBIG; \
+  if (new_size == PRIME_TOOBIG) return ERR_TOOBIG; \
   /* Resize entries. */ \
   hm_name##_entry_t *tmp = realloc(map->entries, new_size * sizeof(hm_name##_entry_t)); \
-  if (tmp == NULL) return HMERR_MEM; \
+  if (tmp == NULL) return ERR_MEM; \
   map->entries = tmp; \
   for (size_t i = map->cap; i < new_size; i++) map->entries[i].next = i + 1; \
  \
@@ -371,7 +364,7 @@ HashMap_codes_t hm_name##_resize(hm_name *map, size_t new_size) { \
   ssize_t *new_buckets = malloc(new_size * sizeof(ssize_t)); \
   if (new_buckets == NULL) { \
     free(new_buckets); \
-    return HMERR_MEM; \
+    return ERR_MEM; \
   } \
   for (size_t i = 0; i < new_size; i++) new_buckets[i] = -1; \
    \
@@ -393,7 +386,7 @@ HashMap_codes_t hm_name##_resize(hm_name *map, size_t new_size) { \
   map->cap = new_size; \
   free(map->buckets); \
   map->buckets = new_buckets; \
-  return HM_SUCCESS; \
+  return DS_SUCCESS; \
 }
 
 #define HashMap_destroy_define(hm_name) \
